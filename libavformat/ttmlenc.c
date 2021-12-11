@@ -49,10 +49,13 @@ typedef struct TTMLMuxContext {
     unsigned int document_written;
 } TTMLMuxContext;
 
+static const int64_t tick_rate = 10000000;
+
 static const char ttml_header_text[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 "<tt\n"
 "%s"
+"  ttp:tickRate=\"%"PRId64"\"\n"
 "  xml:lang=\"%s\">\n"
 "%s"
 "  <body>\n"
@@ -66,16 +69,8 @@ static const char ttml_footer_text[] =
 static void ttml_write_time(AVIOContext *pb, const char tag[],
                             int64_t millisec)
 {
-    int64_t sec, min, hour;
-    sec = millisec / 1000;
-    millisec -= 1000 * sec;
-    min = sec / 60;
-    sec -= 60 * min;
-    hour = min / 60;
-    min -= 60 * hour;
-
-    avio_printf(pb, "%s=\"%02"PRId64":%02"PRId64":%02"PRId64".%03"PRId64"\"",
-                tag, hour, min, sec, millisec);
+    avio_printf(pb, "%s=\"%"PRId64"t\"",
+                tag, millisec * tick_rate / 1000);
 }
 
 static int ttml_set_header_values_from_extradata(
@@ -158,6 +153,7 @@ static int ttml_write_header(AVFormatContext *ctx)
 
             avio_printf(pb, ttml_header_text,
                         header_params.tt_element_params,
+                        tick_rate,
                         printed_lang,
                         header_params.pre_body_elements);
         }
