@@ -843,6 +843,82 @@ Compute derivative/integral of audio stream.
 
 Applying both filters one after another produces original audio.
 
+@section adynamicequalizer
+
+Apply dynamic equalization to input audio stream.
+
+A description of the accepted options follows.
+
+@table @option
+@item threshold
+Set the detection threshold used to trigger equalization.
+Threshold detection is using bandpass filter.
+Default value is 0. Allowed range is from 0 to 100.
+
+@item dfrequency
+Set the detection frequency in Hz used for bandpass filter used to trigger equalization.
+Default value is 1000 Hz. Allowed range is between 2 and 1000000 Hz.
+
+@item dqfactor
+Set the detection resonance factor for bandpass filter used to trigger equalization.
+Default value is 1. Allowed range is from 0.001 to 1000.
+
+@item tfrequency
+Set the target frequency of equalization filter.
+Default value is 1000 Hz. Allowed range is between 2 and 1000000 Hz.
+
+@item tqfactor
+Set the target resonance factor for target equalization filter.
+Default value is 1. Allowed range is from 0.001 to 1000.
+
+@item attack
+Set the amount of milliseconds the signal from detection has to rise above
+the detection threshold before equalization starts.
+Default is 20. Allowed range is between 1 and 2000.
+
+@item release
+Set the amount of milliseconds the signal from detection has to fall below the
+detection threshold before equalization ends.
+Default is 200. Allowed range is between 1 and 2000.
+
+@item knee
+Curve the sharp knee around the detection threshold to calculate
+equalization gain more softly.
+Default is 1. Allowed range is between 0 and 8.
+
+@item ratio
+Set the ratio by which the equalization gain is raised.
+Default is 1. Allowed range is between 1 and 20.
+
+@item makeup
+Set the makeup offset in dB by which the equalization gain is raised.
+Default is 0. Allowed range is between 0 and 30.
+
+@item range
+Set the max allowed cut/boost amount in dB. Default is 0.
+Allowed range is from 0 to 200.
+
+@item slew
+Set the slew factor. Default is 1. Allowed range is from 1 to 200.
+
+@item mode
+Set the mode of filter operation, can be one of the following:
+
+@table @samp
+@item listen
+Output only isolated bandpass signal.
+@item cut
+Cut frequencies above detection threshold.
+@item boost
+Boost frequencies bellow detection threshold.
+@end table
+Default mode is @samp{cut}.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section adynamicsmooth
 
 Apply dynamic smoothing to input audio stream.
@@ -2225,8 +2301,8 @@ Set smooth factor. Default value is @var{11}. Allowed range is from @var{1} to @
 
 This filter supports the all above options as @ref{commands}.
 
-@section anlms
-Apply Normalized Least-Mean-Squares algorithm to the first audio stream using the second audio stream.
+@section anlmf, anlms
+Apply Normalized Least-Mean-(Squares|Fourth) algorithm to the first audio stream using the second audio stream.
 
 This adaptive filter is used to mimic a desired filter by finding the filter coefficients that
 relate to producing the least mean square of the error signal (difference between the desired,
@@ -2886,16 +2962,17 @@ this @code{lavfi.astats.Overall.Peak_count}.
 For description what each key means read below.
 
 @item reset
-Set number of frame after which stats are going to be recalculated.
+Set the number of frames over which cumulative stats are calculated before
+being reset
 Default is disabled.
 
 @item measure_perchannel
-Select the entries which need to be measured per channel. The metadata keys can
+Select the parameters which are measured per channel. The metadata keys can
 be used as flags, default is @option{all} which measures everything.
 @option{none} disables all per channel measurement.
 
 @item measure_overall
-Select the entries which need to be measured overall. The metadata keys can
+Select the parameters which are measured overall. The metadata keys can
 be used as flags, default is @option{all} which measures everything.
 @option{none} disables all overall measurement.
 
@@ -24720,6 +24797,57 @@ To enable compilation of these filters you need to configure FFmpeg with
 @code{--enable-vaapi}.
 
 To use vaapi filters, you need to setup the vaapi device correctly. For more information, please read @url{https://trac.ffmpeg.org/wiki/Hardware/VAAPI}
+
+@section overlay_vaapi
+
+Overlay one video on the top of another.
+
+It takes two inputs and has one output. The first input is the "main" video on which the second input is overlaid.
+This filter requires same memory layout for all the inputs. So, format conversion may be needed.
+
+The filter accepts the following options:
+
+@table @option
+
+@item x
+Set the x coordinate of the overlaid video on the main video.
+Default value is @code{0}.
+
+@item y
+Set the y coordinate of the overlaid video on the main video.
+Default value is @code{0}.
+
+@item w
+Set the width of the overlaid video on the main video.
+Default value is the width of input overlay video.
+
+@item h
+Set the height of the overlaid video on the main video.
+Default value is the height of input overlay video.
+
+@item alpha
+Set blocking detection thresholds. Allowed range is 0.0 to 1.0, it
+requires an input video with alpha channel.
+Default value is @code{0.0}.
+
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Overlay an image LOGO at the top-left corner of the INPUT video. Both inputs for this filter are yuv420p format.
+@example
+-i INPUT -i LOGO -filter_complex "[0:v]hwupload[a], [1:v]format=yuv420p, hwupload[b], [a][b]overlay_vaapi" OUTPUT
+@end example
+@item
+Overlay an image LOGO at the offset (200, 100) from the top-left corner of the INPUT video.
+The inputs have same memory layout for color channels, the overlay has additional alpha plane, like INPUT is yuv420p, and the LOGO is yuva420p.
+@example
+-i INPUT -i LOGO -filter_complex "[0:v]hwupload[a], [1:v]format=yuva420p, hwupload[b], [a][b]overlay_vaapi=x=200:y=100:w=400:h=300:alpha=1.0, hwdownload, format=nv12" OUTPUT
+@end example
+
+@end itemize
 
 @section tonemap_vaapi
 
