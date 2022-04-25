@@ -1,5 +1,6 @@
 /*
- * XVideo Motion Compensation internal functions
+ * Jpeg XL header verification
+ * Copyright (c) 2022 Leo Izen <leo.izen@gmail.com>
  *
  * This file is part of FFmpeg.
  *
@@ -18,14 +19,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_XVMC_INTERNAL_H
-#define AVCODEC_XVMC_INTERNAL_H
+#ifndef AVFORMAT_JPEGXL_PROBE_H
+#define AVFORMAT_JPEGXL_PROBE_H
 
-#include "avcodec.h"
-#include "mpegvideo.h"
-#include "version.h"
+#include <stdint.h>
 
-void ff_xvmc_init_block(MpegEncContext *s);
-void ff_xvmc_pack_pblocks(MpegEncContext *s, int cbp);
+#define FF_JPEGXL_CODESTREAM_SIGNATURE_LE 0x0aff
+#define FF_JPEGXL_CONTAINER_SIGNATURE_LE 0x204c584a0c000000
 
-#endif /* AVCODEC_XVMC_INTERNAL_H */
+int ff_jpegxl_verify_codestream_header(const uint8_t *buf, int buflen);
+
+#endif /* AVFORMAT_JPEGXL_PROBE_H */

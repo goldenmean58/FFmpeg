@@ -20,6 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "config_components.h"
+
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #include <sys/stat.h>
@@ -34,7 +36,9 @@
 #include "avio_internal.h"
 #include "internal.h"
 #include "img2.h"
+#include "jpegxl_probe.h"
 #include "libavcodec/mjpeg.h"
+#include "libavcodec/vbn.h"
 #include "libavcodec/xwd.h"
 #include "subtitles.h"
 
@@ -834,6 +838,24 @@ static int jpegls_probe(const AVProbeData *p)
     return 0;
 }
 
+static int jpegxl_probe(const AVProbeData *p)
+{
+    const uint8_t *b = p->buf;
+
+    /* ISOBMFF-based container */
+    /* 0x4a584c20 == "JXL " */
+    if (AV_RL64(b) == FF_JPEGXL_CONTAINER_SIGNATURE_LE)
+        return AVPROBE_SCORE_EXTENSION + 1;
+    /* Raw codestreams all start with 0xff0a */
+    if (AV_RL16(b) != FF_JPEGXL_CODESTREAM_SIGNATURE_LE)
+        return 0;
+#if CONFIG_IMAGE_JPEGXL_PIPE_DEMUXER
+    if (ff_jpegxl_verify_codestream_header(p->buf, p->buf_size) >= 0)
+        return AVPROBE_SCORE_MAX - 2;
+#endif
+    return 0;
+}
+
 static int pcx_probe(const AVProbeData *p)
 {
     const uint8_t *b = p->buf;
@@ -1112,22 +1134,31 @@ static int photocd_probe(const AVProbeData *p)
 static int gem_probe(const AVProbeData *p)
 {
     const uint8_t *b = p->buf;
-    int ret = 0;
     if ( AV_RB16(b     ) >= 1 && AV_RB16(b    ) <= 3  &&
          AV_RB16(b +  2) >= 8 && AV_RB16(b + 2) <= 779 &&
-        (AV_RB16(b +  4) > 0  || AV_RB16(b + 4) <= 8) &&
-        (AV_RB16(b +  6) > 0  || AV_RB16(b + 6) <= 8) &&
+        (AV_RB16(b +  4) > 0  && AV_RB16(b + 4) <= 32) && /* planes */
+        (AV_RB16(b +  6) > 0  && AV_RB16(b + 6) <= 8) && /* pattern_size */
          AV_RB16(b +  8) &&
          AV_RB16(b + 10) &&
          AV_RB16(b + 12) &&
          AV_RB16(b + 14)) {
-        ret = AVPROBE_SCORE_EXTENSION / 4;
         if (AV_RN32(b + 16) == AV_RN32("STTT") ||
             AV_RN32(b + 16) == AV_RN32("TIMG") ||
             AV_RN32(b + 16) == AV_RN32("XIMG"))
-            ret += 1;
+            return AVPROBE_SCORE_EXTENSION + 1;
+        return AVPROBE_SCORE_EXTENSION / 4;
     }
-    return ret;
+    return 0;
+}
+
+static int vbn_probe(const AVProbeData *p)
+{
+    const uint8_t *b = p->buf;
+    if (AV_RL32(b    ) == VBN_MAGIC &&
+        AV_RL32(b + 4) == VBN_MAJOR &&
+        AV_RL32(b + 8) == VBN_MINOR)
+        return AVPROBE_SCORE_MAX - 1;
+    return 0;
 }
 
 #define IMAGEAUTO_DEMUXER_0(imgname, codecid)
@@ -1164,6 +1195,7 @@ IMAGEAUTO_DEMUXER(gif,       GIF)
 IMAGEAUTO_DEMUXER_EXT(j2k,   JPEG2000, J2K)
 IMAGEAUTO_DEMUXER_EXT(jpeg,  MJPEG, JPEG)
 IMAGEAUTO_DEMUXER(jpegls,    JPEGLS)
+IMAGEAUTO_DEMUXER(jpegxl,    JPEGXL)
 IMAGEAUTO_DEMUXER(pam,       PAM)
 IMAGEAUTO_DEMUXER(pbm,       PBM)
 IMAGEAUTO_DEMUXER(pcx,       PCX)
@@ -1180,6 +1212,7 @@ IMAGEAUTO_DEMUXER(sgi,       SGI)
 IMAGEAUTO_DEMUXER(sunrast,   SUNRAST)
 IMAGEAUTO_DEMUXER(svg,       SVG)
 IMAGEAUTO_DEMUXER(tiff,      TIFF)
+IMAGEAUTO_DEMUXER(vbn,       VBN)
 IMAGEAUTO_DEMUXER(webp,      WEBP)
 IMAGEAUTO_DEMUXER(xbm,       XBM)
 IMAGEAUTO_DEMUXER(xpm,       XPM)
