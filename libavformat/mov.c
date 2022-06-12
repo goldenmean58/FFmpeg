@@ -36,11 +36,9 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
-#include "libavutil/time_internal.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
-#include "libavutil/display.h"
 #include "libavutil/opt.h"
 #include "libavutil/aes.h"
 #include "libavutil/aes_ctr.h"
@@ -49,7 +47,6 @@
 #include "libavutil/spherical.h"
 #include "libavutil/stereo3d.h"
 #include "libavutil/timecode.h"
-#include "libavutil/dovi_meta.h"
 #include "libavcodec/ac3tab.h"
 #include "libavcodec/flac.h"
 #include "libavcodec/hevc.h"
@@ -58,6 +55,7 @@
 #include "avformat.h"
 #include "internal.h"
 #include "avio_internal.h"
+#include "demux.h"
 #include "dovi_isom.h"
 #include "riff.h"
 #include "isom.h"
@@ -2489,8 +2487,6 @@ static int mov_skip_multiple_stsd(MOVContext *c, AVIOContext *pb,
                                   int codec_tag, int format,
                                   int64_t size)
 {
-    int video_codec_id = ff_codec_get_id(ff_codec_movvideo_tags, format);
-
     if (codec_tag &&
          (codec_tag != format &&
           // AVID 1:1 samples with differing data format and codec tag exist
@@ -2499,7 +2495,7 @@ static int mov_skip_multiple_stsd(MOVContext *c, AVIOContext *pb,
           codec_tag != AV_RL32("apcn") && codec_tag != AV_RL32("apch") &&
           // so is dv (sigh)
           codec_tag != AV_RL32("dvpp") && codec_tag != AV_RL32("dvcp") &&
-          (c->fc->video_codec_id ? video_codec_id != c->fc->video_codec_id
+          (c->fc->video_codec_id ? ff_codec_get_id(ff_codec_movvideo_tags, format) != c->fc->video_codec_id
                                  : codec_tag != MKTAG('j','p','e','g')))) {
         /* Multiple fourcc, we skip JPEG. This is not correct, we should
          * export it as a separate AVStream but this needs a few changes
@@ -5025,7 +5021,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                 // pts = frag_stream_info->sidx_pts;
                 dts = frag_stream_info->sidx_pts - sc->time_offset;
                 av_log(c->fc, AV_LOG_DEBUG, "found sidx time %"PRId64
-                        ", using it for pts\n", pts);
+                        ", using it for dts\n", frag_stream_info->sidx_pts);
             } else {
                 dts = sc->track_end - sc->time_offset;
                 av_log(c->fc, AV_LOG_DEBUG, "found track end time %"PRId64
@@ -7691,17 +7687,16 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (atom.size < 0)
         atom.size = INT64_MAX;
-    while (total_size <= atom.size - 8 && !avio_feof(pb)) {
+    while (total_size <= atom.size - 8) {
         int (*parse)(MOVContext*, AVIOContext*, MOVAtom) = NULL;
-        a.size = atom.size;
-        a.type=0;
-        if (atom.size >= 8) {
-            a.size = avio_rb32(pb);
-            a.type = avio_rl32(pb);
-            if (((a.type == MKTAG('f','r','e','e') && c->moov_retry) ||
-                  a.type == MKTAG('h','o','o','v')) &&
-                a.size >= 8 &&
-                c->fc->strict_std_compliance < FF_COMPLIANCE_STRICT) {
+        a.size = avio_rb32(pb);
+        a.type = avio_rl32(pb);
+        if (avio_feof(pb))
+            break;
+        if (((a.type == MKTAG('f','r','e','e') && c->moov_retry) ||
+              a.type == MKTAG('h','o','o','v')) &&
+            a.size >= 8 &&
+            c->fc->strict_std_compliance < FF_COMPLIANCE_STRICT) {
                 uint32_t type;
                 avio_skip(pb, 4);
                 type = avio_rl32(pb);
@@ -7713,22 +7708,21 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                     av_log(c->fc, AV_LOG_ERROR, "Detected moov in a free or hoov atom.\n");
                     a.type = MKTAG('m','o','o','v');
                 }
+        }
+        if (atom.type != MKTAG('r','o','o','t') &&
+            atom.type != MKTAG('m','o','o','v')) {
+            if (a.type == MKTAG('t','r','a','k') ||
+                a.type == MKTAG('m','d','a','t')) {
+                av_log(c->fc, AV_LOG_ERROR, "Broken file, trak/mdat not at top-level\n");
+                avio_skip(pb, -8);
+                c->atom_depth --;
+                return 0;
             }
-            if (atom.type != MKTAG('r','o','o','t') &&
-                atom.type != MKTAG('m','o','o','v')) {
-                if (a.type == MKTAG('t','r','a','k') ||
-                    a.type == MKTAG('m','d','a','t')) {
-                    av_log(c->fc, AV_LOG_ERROR, "Broken file, trak/mdat not at top-level\n");
-                    avio_skip(pb, -8);
-                    c->atom_depth --;
-                    return 0;
-                }
-            }
+        }
+        total_size += 8;
+        if (a.size == 1 && total_size + 8 <= atom.size) { /* 64 bit extended size */
+            a.size = avio_rb64(pb) - 8;
             total_size += 8;
-            if (a.size == 1 && total_size + 8 <= atom.size) { /* 64 bit extended size */
-                a.size = avio_rb64(pb) - 8;
-                total_size += 8;
-            }
         }
         av_log(c->fc, AV_LOG_TRACE, "type:'%s' parent:'%s' sz: %"PRId64" %"PRId64" %"PRId64"\n",
                av_fourcc2str(a.type), av_fourcc2str(atom.type), a.size, total_size, atom.size);
@@ -8038,12 +8032,13 @@ static int mov_read_timecode_track(AVFormatContext *s, AVStream *st)
     int64_t cur_pos = avio_tell(sc->pb);
     int64_t value;
     AVRational tc_rate = st->avg_frame_rate;
+    int tmcd_nb_frames = sc->tmcd_nb_frames;
     int rounded_tc_rate;
 
     if (!sti->nb_index_entries)
         return -1;
 
-    if (!tc_rate.num || !tc_rate.den || !sc->tmcd_nb_frames)
+    if (!tc_rate.num || !tc_rate.den || !tmcd_nb_frames)
         return -1;
 
     avio_seek(sc->pb, sti->index_entries->pos, SEEK_SET);
@@ -8060,9 +8055,15 @@ static int mov_read_timecode_track(AVFormatContext *s, AVStream *st)
      * format). */
 
     /* 60 fps content have tmcd_nb_frames set to 30 but tc_rate set to 60, so
-     * we multiply the frame number with the quotient. */
+     * we multiply the frame number with the quotient.
+     * See tickets #9492, #9710. */
     rounded_tc_rate = (tc_rate.num + tc_rate.den / 2) / tc_rate.den;
-    value = av_rescale(value, rounded_tc_rate, sc->tmcd_nb_frames);
+    /* Work around files where tmcd_nb_frames is rounded down from frame rate
+     * instead of up. See ticket #5978. */
+    if (tmcd_nb_frames == tc_rate.num / tc_rate.den &&
+        s->strict_std_compliance < FF_COMPLIANCE_STRICT)
+        tmcd_nb_frames = rounded_tc_rate;
+    value = av_rescale(value, rounded_tc_rate, tmcd_nb_frames);
 
     parse_timecode_in_framenum_format(s, st, value, flags);
 
@@ -8745,20 +8746,20 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     /* Multiple stsd handling. */
     if (sc->stsc_data) {
-        /* Keep track of the stsc index for the given sample, then check
-        * if the stsd index is different from the last used one. */
+        if (sc->stsc_data[sc->stsc_index].id > 0 &&
+            sc->stsc_data[sc->stsc_index].id - 1 < sc->stsd_count &&
+            sc->stsc_data[sc->stsc_index].id - 1 != sc->last_stsd_index) {
+            ret = mov_change_extradata(sc, pkt);
+            if (ret < 0)
+                return ret;
+        }
+
+        /* Update the stsc index for the next sample */
         sc->stsc_sample++;
         if (mov_stsc_index_valid(sc->stsc_index, sc->stsc_count) &&
             mov_get_stsc_samples(sc, sc->stsc_index) == sc->stsc_sample) {
             sc->stsc_index++;
             sc->stsc_sample = 0;
-        /* Do not check indexes after a switch. */
-        } else if (sc->stsc_data[sc->stsc_index].id > 0 &&
-                   sc->stsc_data[sc->stsc_index].id - 1 < sc->stsd_count &&
-                   sc->stsc_data[sc->stsc_index].id - 1 != sc->last_stsd_index) {
-            ret = mov_change_extradata(sc, pkt);
-            if (ret < 0)
-                return ret;
         }
     }
 
@@ -9036,7 +9037,7 @@ const AVInputFormat ff_mov_demuxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("QuickTime / MOV"),
     .priv_class     = &mov_class,
     .priv_data_size = sizeof(MOVContext),
-    .extensions     = "mov,mp4,m4a,3gp,3g2,mj2,psp,m4b,ism,ismv,isma,f4v",
+    .extensions     = "mov,mp4,m4a,3gp,3g2,mj2,psp,m4b,ism,ismv,isma,f4v,avif",
     .flags_internal = FF_FMT_INIT_CLEANUP,
     .read_probe     = mov_probe,
     .read_header    = mov_read_header,

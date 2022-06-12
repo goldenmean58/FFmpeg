@@ -20,8 +20,10 @@ OBJS = allfilters.o                                                     \
        framequeue.o                                                     \
        graphdump.o                                                      \
        graphparser.o                                                    \
+       version.o                                                        \
        video.o                                                          \
 
+OBJS-$(HAVE_LIBC_MSVCRT)                     += file_open.o
 OBJS-$(HAVE_THREADS)                         += pthread.o
 
 # subsystems
@@ -195,6 +197,8 @@ OBJS-$(CONFIG_BLACKDETECT_FILTER)            += vf_blackdetect.o
 OBJS-$(CONFIG_BLACKFRAME_FILTER)             += vf_blackframe.o
 OBJS-$(CONFIG_BLEND_FILTER)                  += vf_blend.o framesync.o
 OBJS-$(CONFIG_BLEND_VULKAN_FILTER)           += vf_blend_vulkan.o framesync.o vulkan.o vulkan_filter.o
+OBJS-$(CONFIG_BLOCKDETECT_FILTER)            += vf_blockdetect.o
+OBJS-$(CONFIG_BLURDETECT_FILTER)             += vf_blurdetect.o edge_common.o
 OBJS-$(CONFIG_BM3D_FILTER)                   += vf_bm3d.o framesync.o
 OBJS-$(CONFIG_BOXBLUR_FILTER)                += vf_boxblur.o boxblur.o
 OBJS-$(CONFIG_BOXBLUR_OPENCL_FILTER)         += vf_avgblur_opencl.o opencl.o \
@@ -266,7 +270,7 @@ OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWGRAPH_FILTER)              += f_drawgraph.o
 OBJS-$(CONFIG_DRAWGRID_FILTER)               += vf_drawbox.o
 OBJS-$(CONFIG_DRAWTEXT_FILTER)               += vf_drawtext.o
-OBJS-$(CONFIG_EDGEDETECT_FILTER)             += vf_edgedetect.o
+OBJS-$(CONFIG_EDGEDETECT_FILTER)             += vf_edgedetect.o edge_common.o
 OBJS-$(CONFIG_ELBG_FILTER)                   += vf_elbg.o
 OBJS-$(CONFIG_ENTROPY_FILTER)                += vf_entropy.o
 OBJS-$(CONFIG_EPX_FILTER)                    += vf_epx.o
@@ -365,6 +369,7 @@ OBJS-$(CONFIG_MIX_FILTER)                    += vf_mix.o framesync.o
 OBJS-$(CONFIG_MONOCHROME_FILTER)             += vf_monochrome.o
 OBJS-$(CONFIG_MORPHO_FILTER)                 += vf_morpho.o
 OBJS-$(CONFIG_MPDECIMATE_FILTER)             += vf_mpdecimate.o
+OBJS-$(CONFIG_MULTIPLY_FILTER)               += vf_multiply.o
 OBJS-$(CONFIG_NEGATE_FILTER)                 += vf_negate.o
 OBJS-$(CONFIG_NLMEANS_FILTER)                += vf_nlmeans.o
 OBJS-$(CONFIG_NLMEANS_OPENCL_FILTER)         += vf_nlmeans_opencl.o opencl.o opencl/nlmeans.o
@@ -595,6 +600,7 @@ SHLIBOBJS                                    += log2_tab.o
 # Windows resource file
 SLIBOBJS-$(HAVE_GNU_WINDRES)                 += avfilterres.o
 
+SKIPHEADERS-$(CONFIG_LCMS2)                  += fflcms2.h
 SKIPHEADERS-$(CONFIG_LIBVIDSTAB)             += vidstabutils.h
 
 SKIPHEADERS-$(CONFIG_QSVVPP)                 += qsvvpp.h

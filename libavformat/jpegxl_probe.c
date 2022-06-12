@@ -96,10 +96,10 @@ static uint64_t jpegxl_u64(GetBitContext *gb)
         ret = jxl_bits(12);
         while (jxl_bits(1)) {
             if (shift < 60) {
-                ret |= jxl_bits(8) << shift;
+                ret |= (uint64_t)jxl_bits(8) << shift;
                 shift += 8;
             } else {
-                ret |= jxl_bits(4) << shift;
+                ret |= (uint64_t)jxl_bits(4) << shift;
                 break;
             }
         }
@@ -250,8 +250,11 @@ int ff_jpegxl_verify_codestream_header(const uint8_t *buf, int buflen)
     int xyb_encoded = 1, have_icc_profile = 0;
     uint32_t num_extra_channels;
     uint64_t extensions;
+    int ret;
 
-    init_get_bits8(gb, buf, buflen);
+    ret = init_get_bits8(gb, buf, buflen);
+    if (ret < 0)
+        return ret;
 
     if (jxl_bits(16) != FF_JPEGXL_CODESTREAM_SIGNATURE_LE)
         return -1;
