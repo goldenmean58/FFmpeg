@@ -31,6 +31,7 @@
 #include "h263enc.h"
 #include "mpeg4video.h"
 #include "mpeg4videodata.h"
+#include "mpeg4videodefs.h"
 #include "mpeg4videoenc.h"
 #include "mpegvideoenc.h"
 #include "profiles.h"
@@ -174,7 +175,7 @@ static inline int decide_ac_pred(MpegEncContext *s, int16_t block[6][64],
                     ac_val1[i + 8] = level;
                 }
             }
-            st[n] = s->intra_h_scantable.permutated;
+            st[n] = s->permutated_intra_h_scantable;
         } else {
             const int xy = s->mb_x - 1 + s->mb_y * s->mb_stride;
             /* left prediction */
@@ -196,7 +197,7 @@ static inline int decide_ac_pred(MpegEncContext *s, int16_t block[6][64],
                     ac_val1[i + 8] = block[n][s->idsp.idct_permutation[i]];
                 }
             }
-            st[n] = s->intra_v_scantable.permutated;
+            st[n] = s->permutated_intra_v_scantable;
         }
 
         for (i = 63; i > 0; i--)  // FIXME optimize
@@ -639,7 +640,7 @@ void ff_mpeg4_encode_mb(MpegEncContext *s, int16_t block[6][64],
                 if (s->max_b_frames > 0) {
                     int i;
                     int x, y, offset;
-                    uint8_t *p_pic;
+                    const uint8_t *p_pic;
 
                     x = s->mb_x * 16;
                     y = s->mb_y * 16;
@@ -649,7 +650,7 @@ void ff_mpeg4_encode_mb(MpegEncContext *s, int16_t block[6][64],
 
                     s->mb_skipped = 1;
                     for (i = 0; i < s->max_b_frames; i++) {
-                        uint8_t *b_pic;
+                        const uint8_t *b_pic;
                         int diff;
                         Picture *pic = s->reordered_input_picture[i + 1];
 
@@ -1286,6 +1287,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
+    ff_qpeldsp_init(&s->qdsp);
     if ((ret = ff_mpv_encode_init(avctx)) < 0)
         return ret;
 
@@ -1393,7 +1395,7 @@ static const AVClass mpeg4enc_class = {
 
 const FFCodec ff_mpeg4_encoder = {
     .p.name         = "mpeg4",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("MPEG-4 part 2"),
+    CODEC_LONG_NAME("MPEG-4 part 2"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_MPEG4,
     .priv_data_size = sizeof(MpegEncContext),
